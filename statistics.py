@@ -2,10 +2,12 @@ from lxml import etree
 import xlwt
 import datetime
 import time
+import pymysql
 
-class ParseWeibo:
-    inputFileName = 'page_content.txt'
-    pageContent = []
+class Statistics:
+    dbConnection = None
+    dbCursor = None
+    accountList = []
     statistics = {
         'last20':[],
         '2018.7':[],
@@ -17,28 +19,25 @@ class ParseWeibo:
     }
     
     def __init__(self):
-        arr1 = open(self.inputFileName).read().strip().split('`1')
-        for line2 in arr1:
-            arr2 = line2.split('`2')
-            if len(arr2) < 3:
-                continue
-            #if 'BitMEX' == arr2[0]:
-            #    print(arr2[2])
-            #else:
-            #    continue
-            self.pageContent.append({'name':arr2[0],'url':arr2[1],'content_list':arr2[2].split('`3')})
+        self.dbConnection = pymysql.connect(
+            host='47.98.110.129',
+            user='root',
+            password='123456',
+            database='jenny_crawl',
+            charset='utf8',
+            cursorclass = pymysql.cursors.DictCursor
+        )
+        self.dbCursor = self.dbConnection.cursor()
+
+        self.dbCursor.execute("select * from weibo_account;")
+        self.accountList = self.dbCursor.fetchall()
 
     def run(self):
-        self.parsePageContent()
-        self.outExcelFile()
-        print('done!')
-
-    def parsePageContent(self):
-        for row in self.pageContent:
-            data = self.parseOneAccountContent(row['content_list'])
+        for account in self.accountList:
+            feedList = self.getFeedByAccountId(account['id'])
             for key in self.statistics:
                 if 'last20'==key:
-                    feedList = sorted(data['feed_list'],key=lambda x:x['pubtime'], reverse=True)[:20]
+                    outFeedList = feedList[:20]
                 else:
                     arr1 = key.split('.')
                     year = int(arr1[0])
@@ -46,72 +45,25 @@ class ParseWeibo:
                     nextMonth = '%s.%s' % (year,month+1) if month < 12 else '%s.1' % (year+1)
                     startTime = datetime.datetime.strptime(key, '%Y.%m')
                     endTime = datetime.datetime.strptime(nextMonth , '%Y.%m')
-                    feedList = []
-                    for feed in data['feed_list']:
-                        pubtime = datetime.datetime.strptime(feed['pubtime'], "%Y-%m-%d %H:%M")
-                        if pubtime >= startTime and pubtime < endTime:
-                            feedList.append(feed)
+                    outFeedList = []
+                    for feed in feedList:
+                        #print(startTime,endTime,feed['pubtime'])
+                        if feed['pubtime'] >= startTime and feed['pubtime'] < endTime:
+                            outFeedList.append(feed)
                 self.statistics[key].append({
-                    'name':row['name'],
-                    'url':row['url'],
-                    'statictics':dict(**data['counter_info'], **self.getStatistics(feedList)),
-                    'weibo_list':feedList
+                    'name':account['name'],
+                    'url':'https://m.weibo.cn/u/%s' % account['uid'],
+                    'statictics':dict(**account, **self.getStatistics(outFeedList)),
+                    #'weibo_list':feedList
                 })
-            #print(row['name'],row['url'],dict(**data['counter_info'], **self.getStatistics(data['weibo_list'])))
+        self.outExcelFile()
+        print('done!')
 
-    def parseOneAccountContent(self, contentList):
-        result = {
-            'counter_info':self.parseAccountInfo(contentList[0]),
-            'feed_list':self.parseFeedList(contentList)
-        }
-
-        return result
-
-    def parseAccountInfo(self, content):
-        accountInfo = {}
-        page = etree.HTML(content)
-        #粉丝数
-        counterNode = page.xpath('//table[@class="tb_counter"]')
-        #print(counterNode)
-        if not counterNode:
-            accountInfo = {
-                'attention' :0,
-                'fans'      :0,
-                'weibo'     :0    
-            }
-        else:
-            attentionNode = counterNode[0].xpath('./tbody/tr/td[1]//strong')
-            fansNode = counterNode[0].xpath('./tbody/tr/td[2]//strong')
-            weiboNode = counterNode[0].xpath('./tbody/tr/td[3]//strong')
-            accountInfo = {
-                'attention' :int(attentionNode[0].text) if attentionNode and attentionNode[0].text.isdigit() else 0,
-                'fans'      :int(fansNode[0].text) if fansNode and fansNode[0].text.isdigit() else 0,
-                'weibo'     :int(weiboNode[0].text) if weiboNode and weiboNode[0].text.isdigit() else 0,
-            }
-        return accountInfo
-    
-    def parseFeedList(self, contentList):
-        feedList = []
-        for content in contentList:
-            page = etree.HTML(content)
-            #每条微博信息
-            feedNodeList = page.xpath('//div[@action-type="feed_list_item"]')
-            for feedNode in feedNodeList:
-                contentNode = feedNode.xpath('.//div[@class="WB_detail"]/div[@node-type="feed_list_content"]')
-                pubtimeNode = feedNode.xpath('.//div[@class="WB_detail"]/div[contains(@class,"WB_from")]/a[@node-type="feed_list_item_date"]/@title')
-                forwardNode = feedNode.xpath('.//div[@class="WB_handle"]/ul/li[2]//span[contains(@class,"S_line1")]/span/em[2]')
-                commentNode = feedNode.xpath('.//div[@class="WB_handle"]/ul/li[3]//span[contains(@class,"S_line1")]/span/em[2]')
-                likeNode = feedNode.xpath('.//div[@class="WB_handle"]/ul/li[4]//span[contains(@class,"S_line1")]/span/em[2]')
-
-                feedList.append({
-                    'content':contentNode[0].text.strip() if contentNode else '',
-                    'pubtime':pubtimeNode[0],
-                    'pubtime_stamp':int(time.mktime(time.strptime(pubtimeNode[0], "%Y-%m-%d %H:%M"))),
-                    'forward':int(forwardNode[0].text) if forwardNode and forwardNode[0].text.isdigit() else 0,
-                    'comment':int(commentNode[0].text) if commentNode and commentNode[0].text.isdigit() else 0,
-                    'like':int(likeNode[0].text) if likeNode and likeNode[0].text.isdigit() else 0,
-                })
-        return feedList
+    def getFeedByAccountId(self, accountId):
+        self.dbCursor.execute("select * from weibo_feed where account_id = %d order by pubtime desc,id asc;" % accountId)
+        feedList = self.dbCursor.fetchall()
+        
+        return feedList 
 
     def getStatistics(self, data):
         forwardTotal = sum([i['forward'] for i in data])
@@ -167,7 +119,7 @@ class ParseWeibo:
                 sheet.write(index, 0, row['name'])
                 sheet.write(index, 1, row['url'])
                 sheet.write(index, 2, row['statictics']['fans'])
-                sheet.write(index, 3, row['statictics']['weibo'])
+                sheet.write(index, 3, row['statictics']['feed'])
                 sheet.write(index, 4, row['statictics']['forward_total'])
                 sheet.write(index, 5, row['statictics']['forward_avg'])
                 sheet.write(index, 6, row['statictics']['forward_max'])
@@ -195,8 +147,8 @@ class ParseWeibo:
                         else:
                             sheet2.write(index, index2, weibo[columns[index2]])
                     index += 1
-            '''     
+            '''
             book.save('weibo.xls')
 
-parseWeibo = ParseWeibo()
-parseWeibo.run()
+statistics = Statistics()
+statistics.run()

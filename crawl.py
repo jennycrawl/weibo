@@ -1,15 +1,16 @@
 import os
 import time
+import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
 
 class CrawlWeibo:
     chromeDriver = None
-    urlFileName = 'url_list.txt'
+    urlFileName = 'url_list2.txt'
     outFileName = 'page_content.txt'
-    #cookieStr = 'SINAGLOBAL=1191667905077.3381.1436279964765; ULV=1541488702660:1:1:1:7813753085219.45.1541488702623:; wvr=6; UOR=,,login.sina.com.cn; SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9WWxmd2YbyypZovNB1XTl7Md5JpX5KMhUgL.Fo2RSon7SoBce0M2dJLoIpnLxK-L1h5L1K.LxK.LBonL1-9QMg_u9cjt; YF-Page-G0=d52660735d1ea4ed313e0beb68c05fc5; ALF=1573572899; SSOLoginState=1542036901; SCF=AlDOMz1UW2pT9nUIRY1TWFq7uAGyCxzSohmcI64qwwcJFVmSWtE65xTvX4Yn13iXeiR_vkhBdjPi8zb_ObD_kQc.; SUB=_2A2527e31DeRhGedG7VoR9irKyDuIHXVVm1g9rDV8PUNbmtBeLWL5kW9NUQ3yp5QTPWnA-RlHjn-a_DTnPKkj60jS; SUHB=09PM1m4iqmIxOY'
-    cookieStr = 'YF-Page-G0=a1c00fe9e544064d664e61096bd4d187; SUB=_2AkMsve51f8NxqwJRmPwcxGnnbY1xyQDEieKa4R-uJRMxHRl-yT83qhQrtRB6Bz3AmkMGDSDmgKgnDZuKt56PBNWrAgbQ; SUBP=0033WrSXqPxfM72-Ws9jqgMF55529P9D9WWE4qv6GB0aJBu-ksW9uQ1r'
+    cookieStr = 'SINAGLOBAL=5534878588822.174.1515075293726; UOR=passport.weibo.com,weibo.com,www.baidu.com; un=18667919082; wb_view_log_1868064637=1366*7681; Ugrow-G0=5b31332af1361e117ff29bb32e4d8439; ALF=1576896093; SSOLoginState=1545360094; SCF=An8BaW5wgbriHRbETfFQdIHn7oWK2RwRGWDdjMHFBe2w4Kan1yQO_a2PLdra1eis6OG9fOxkTMgUZaRCv_WgG0M.; SUB=_2A25xGCKPDeRhGedG7VoR9irKyDuIHXVSbBNHrDV8PUNbmtBeLVijkW9NUQ3yp1aR5vqutlycdhD1tLmyHkfI6lk5; SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9WWxmd2YbyypZovNB1XTl7Md5JpX5KzhUgL.Fo2RSon7SoBce0M2dJLoIpnLxK-L1h5L1K.LxK.LBonL1-9QMg_u9cjt; SUHB=0YhgSmpJQry9WX; wvr=6; YF-V5-G0=b4445e3d303e043620cf1d40fc14e97a; YF-Page-G0=046bedba5b296357210631460a5bf1d2; _s_tentry=login.sina.com.cn; Apache=8358999518517.582.1545360098139; ULV=1545360098180:11:4:2:8358999518517.582.1545360098139:1545295101568'
+    #cookieStr = 'YF-Page-G0=a1c00fe9e544064d664e61096bd4d187; SUB=_2AkMsve51f8NxqwJRmPwcxGnnbY1xyQDEieKa4R-uJRMxHRl-yT83qhQrtRB6Bz3AmkMGDSDmgKgnDZuKt56PBNWrAgbQ; SUBP=0033WrSXqPxfM72-Ws9jqgMF55529P9D9WWE4qv6GB0aJBu-ksW9uQ1r'
     cookieDomain = '.weibo.com'
     cookiePath = '/'
     cookieList = []
@@ -45,25 +46,29 @@ class CrawlWeibo:
 
     def run(self):
         outFile = open(self.outFileName, 'w')
-        try:
-            for account in self.accountList:
-                name = account['name']
-                url = account['url']
-                if 'FOTA官方微博' != name:
+        for account in self.accountList:
+            name = account['name']
+            url = account['url']
+            #if 'ZB中币' != name:
+            #    continue
+
+            pageContentList = []
+            [pageContent,nextPage,earliestPubtime] = self.crawlOnePage(url)
+            if not pageContent:
+                continue
+            pageContentList.append(pageContent)
+            startTime = datetime.datetime.strptime('2018-07-01 00:00', "%Y-%m-%d %H:%M")
+            '''
+            while nextPage:
+                [pageContent,nextPage,earliestPubtime] = self.crawlOnePage(nextPage)
+                if not pageContent:
                     continue
-                self.chromeDriver.get(url)
-                self.chromeDriver.delete_all_cookies()
-                for cookie in self.cookieList:
-                    self.chromeDriver.add_cookie(cookie)
-                self.chromeDriver.get(url)
-                time.sleep(1)
-                outFile.write('%s`2%s`2%s`1' % (name,url,self.chromeDriver.page_source))
-                #self.chromeDriver.close()
-                #os.system("ps -ef | grep chrome | grep -v grep | awk '{print $2}' | xargs kill -9")
-            self.chromeDriver.quit()
-        except WebDriverException as msg:
-            print(msg)
-            self.chromeDriver.quit()
+                pageContentList.append(pageContent)
+                if earliestPubtime and earliestPubtime < startTime:
+                    break
+            '''
+            outFile.write('%s`2%s`2%s`1' % (name,url,'`3'.join(pageContentList))) 
+        self.chromeDriver.quit()
         '''
         driver = webdriver.Chrome()
         driver.get(url)
@@ -72,6 +77,46 @@ class CrawlWeibo:
         driver.get(url)
         outFile.write('%s`2%s`2%s`1' % (name,url,driver.page_source))
         '''
+    def crawlOnePage(self, url):
+        print(url)
+        pageContent = ''
+        try:
+            self.chromeDriver.get(url)
+            self.chromeDriver.delete_all_cookies()
+            for cookie in self.cookieList:
+                self.chromeDriver.add_cookie(cookie)
+            self.chromeDriver.get(url)
+            time.sleep(1)
+            height = self.chromeDriver.find_element_by_tag_name('body').size.get('height', 0)
+            print(height)
+            #模拟浏览器下拉
+            while 1:
+                self.chromeDriver.execute_script('window.scrollTo(0,document.body.scrollHeight)')
+                time.sleep(2)
+                newHeight = self.chromeDriver.find_element_by_tag_name('body').size.get('height', 0)
+                print(newHeight)
+                if newHeight == height:
+                    break
+                height = newHeight
+            pageContent = self.chromeDriver.page_source
+            #outFile.write('%s`2%s`2%s`1' % (name,url,self.chromeDriver.page_source))
+            #self.chromeDriver.close()
+            #os.system("ps -ef | grep chrome | grep -v grep | awk '{print $2}' | xargs kill -9")
+            #self.chromeDriver.quit()
+        except WebDriverException as msg:
+            print(msg)
+            #self.chromeDriver.quit()
+        try:
+            nextPage = self.chromeDriver.find_element_by_xpath('//div[@class="W_pages"]/a[contains(@class,"page next")]').get_attribute('href')
+            pubtime = self.chromeDriver.find_element_by_xpath('//div[@class="WB_detail"]/div[contains(@class,"WB_from")]/a[@node-type="feed_list_item_date"]').get_attribute('title')
+            earliestPubtime = self.chromeDriver.find_elements_by_xpath('//div[@class="WB_detail"]/div[contains(@class,"WB_from")]/a[@node-type="feed_list_item_date"]')[-1].get_attribute('title')
+            earliestPubtime = datetime.datetime.strptime(earliestPubtime, "%Y-%m-%d %H:%M")
+            print(pubtime,earliestPubtime)
+        except WebDriverException as msg:
+            print(msg)
+            nextPage = ''
+            earliestPubtime = None
+        return pageContent,nextPage,earliestPubtime
 
 crawlWeibo = CrawlWeibo()
 crawlWeibo.run()
